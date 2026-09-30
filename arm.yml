@@ -1,0 +1,35 @@
+# Builds both MPC plugins for 32-bit ARM in armv7 containers (no cross toolchain needed), checks them against the
+# properties of the known-good ASR10 effect build, and publishes the release zips as downloadable artifacts.
+# Runs on every push; start it by hand from the Actions tab too (workflow_dispatch).
+# Scripts are run through `bash` so this also works when the files were uploaded through the GitHub web page,
+# which drops executable permissions.
+name: ARM build
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  arm:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        with: { platforms: arm }
+      - name: Build both plugins for ARM (armv7 containers, under QEMU; takes a few minutes)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq zip >/dev/null
+          bash scripts/package.sh
+          bash scripts/package_inst.sh
+      - name: Check the binaries against the known-good effect build
+        run: |
+          bash scripts/check_arm.sh build/arm/asr10.so
+          bash scripts/check_arm.sh build/arm/asr10_inst.so build/arm/asr10.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mpc-armv7-packages
+          path: dist/*.zip
+  tests:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Native tests (x86 parser, engine and plugin through an offline VST2 host)"
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq g++ gcc make zip >/dev/null
+          make test
